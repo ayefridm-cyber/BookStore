@@ -16,3 +16,7 @@
 
 ---
 **פותח על ידי:** אילת כהן
+<img width="1889" height="1032" alt="צילום מסך 2026-03-25 213942" src="https://github.com/user-attachments/assets/9c78e80c-9fd5-4b16-867a-1a965fc91159" />
+<img width="1882" height="1032" alt="צילום מסך 2026-03-25 213805" src="https://github.com/user-attachments/assets/b0f9b48f-c92b-4e19-9beb-a752adff1112" />
+<img width="1891" height="1039" alt="צילום מסך 2026-03-25 213652" src="https://github.com/user-attachments/assets/864acb74-0a8b-4851-909a-096a343c4854" />
+<img width="1907" height="1027" alt="צילום מסך 2026-03-25 213323" src="https://github.com/user-attachments/assets/090aa496-4c7b-4d04-ade9-59801871257a" />
