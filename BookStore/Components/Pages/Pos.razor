@@ -1,0 +1,364 @@
+﻿@page "/pos"
+@rendermode InteractiveServer
+@using BookStore.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject IJSRuntime JS
+
+<PageTitle>קופה ומכירות</PageTitle>
+
+<style>
+    /* רקע העמוד */
+    .page-container {
+        background-color: #f2efe9;
+        min-height: 100vh;
+        margin: -24px;
+        padding: 24px;
+    }
+
+    /* החלונות הלבנים */
+    .elegant-window {
+        background-color: #ffffff;
+        border: 1px solid #dcd3c9;
+        border-radius: 2px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+
+    .section-title {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #2b170c;
+        margin-bottom: 2rem;
+        border-right: 5px solid #a98467;
+        padding-right: 15px;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c584c;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    /* כרטיסי ספרים - ניגודיות משופרת */
+    .book-item-card {
+        background-color: #fdfaf5; /* בז' בהיר מאוד שיוצר ניגודיות מול החלון הלבן */
+        border: 1px solid #ece8e1;
+        border-radius: 2px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        position: relative;
+    }
+
+        /* מעבר עכבר - מכהה את הרקע */
+        .book-item-card:hover {
+            background-color: #f2eee4;
+            border-color: #a98467;
+        }
+
+    /* אינדיקטור כמות בעגלה */
+    .qty-badge {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        background-color: #a98467;
+        color: white;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        font-weight: bold;
+    }
+
+    .clean-input {
+        background-color: #fcfbf9;
+        border: 1px solid #dcd3c9;
+        color: #432818;
+        padding: 10px 12px;
+        border-radius: 0;
+        width: 100%;
+    }
+
+    .btn-elegant-primary {
+        background-color: #432818;
+        color: #f5f2ed;
+        border: none;
+        padding: 12px 20px;
+        font-weight: 600;
+    }
+
+        .btn-elegant-primary:hover {
+            background-color: #2b170c;
+        }
+
+    .text-price {
+        color: #386641;
+        font-weight: 700;
+    }
+
+    .color-expense {
+        color: #bc4749;
+    }
+
+    .cart-table td {
+        border-bottom: 1px solid #f2efe9;
+        padding: 15px 5px;
+    }
+</style>
+
+<div dir="rtl" class="page-container">
+    <div class="mb-5">
+        <h2 class="section-title">קופה ומכירה</h2>
+    </div>
+
+    <div class="row g-4">
+        @* ---------- חלון קטלוג ---------- *@
+        <div class="col-md-7">
+            <div class="elegant-window p-4 h-100">
+                <div class="stat-label mb-3">חיפוש בקטלוג</div>
+                <input type="search" class="clean-input mb-4"
+                       placeholder="הקלידי שם ספר או מקט..."
+                       @bind="searchTerm" @bind:event="oninput" />
+
+                @if (books == null)
+                {
+                    <p class="text-muted">טוען נתונים...</p>
+                }
+                else
+                {
+                    <div class="row g-3" style="max-height: 600px; overflow-y: auto;">
+                        @foreach (var book in FilteredBooks)
+                        {
+                            var qtyInCart = GetQuantityInCart(book.Id);
+                            <div class="col-md-4">
+                                <div class="book-item-card p-3 h-100 d-flex flex-column" @onclick="() => AddToCart(book)">
+                                    @if (qtyInCart > 0)
+                                    {
+                                        <div class="qty-badge">@qtyInCart בעגלה</div>
+                                    }
+
+                                    <div class="fw-bold text-dark mb-1 @(qtyInCart > 0 ? "mt-4" : "")">@book.Name</div>
+                                    <div class="small text-muted mb-3">מקט: @book.Id</div>
+
+                                    <div class="mt-auto">
+                                        <div class="text-price">@(book.DiscountPrice > 0 ? book.DiscountPrice : book.SellingPrice) ₪</div>
+                                        <div class="mt-2 small @(book.StockQuantity > 2 ? "text-muted" : "color-expense fw-bold")">
+                                            במלאי: @book.StockQuantity
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ---------- חלון עגלת קניות ---------- *@
+        <div class="col-md-5">
+            <div class="elegant-window p-4 h-100 d-flex flex-column">
+                <div class="stat-label mb-3">סל מכירה</div>
+
+                <div class="mb-4">
+                    <input type="text" class="clean-input" @bind="newOrder.CustomerName" placeholder="שם הלקוח" />
+                </div>
+
+                @if (!newOrder.OrderItems.Any())
+                {
+                    <div class="flex-grow-1 d-flex align-items-center justify-content-center text-muted border-top border-bottom my-3">
+                        העגלה ריקה.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive flex-grow-1">
+                        <table class="table cart-table align-middle">
+                            <tbody>
+                                @foreach (var item in newOrder.OrderItems)
+                                {
+                                    <tr>
+                                        <td class="small fw-bold">@item.Book.Name</td>
+                                        <td style="width: 70px;">
+                                            <input type="number" class="clean-input text-center p-1"
+                                                   @bind="item.Quantity" @bind:after="UpdateTotal" min="1" max="@item.Book.StockQuantity" />
+                                        </td>
+                                        <td class="text-end text-price">@(item.UnitPrice* item.Quantity) ₪</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm text-muted" @onclick="() => RemoveFromCart(item)">מחק</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-top" style="border-color: #dcd3c9 !important;">
+                        @* מנגנון הנחה ידנית *@
+                        <div class="mb-3 d-flex align-items-center justify-content-between">
+                            <label class="stat-label m-0">הנחה ידנית (₪)</label>
+                            <input type="number" class="clean-input text-center" style="width: 100px;"
+                                   @bind="manualDiscount" @bind:after="UpdateTotal" min="0" step="1" />
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div class="stat-label m-0">סה"כ לתשלום</div>
+                            <div class="h2 fw-bold color-income m-0">@newOrder.TotalAmount ₪</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="stat-label d-block">אמצעי תשלום</label>
+                            <select class="clean-input" @bind="newOrder.PaymentMethod">
+                                @foreach (PayType payType in Enum.GetValues(typeof(PayType)))
+                                {
+                                    @* שימוש בפונקציית העזר כדי להציג טקסט בעברית *@
+                                    <option value="@payType">@GetPaymentDisplayName(payType)</option>
+                                }
+                            </select>
+                        </div>
+
+                        <button class="btn-elegant-primary w-100" @onclick="CompleteSale">
+                            אישור עסקה ותשלום
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@* --- מודל קבלה --- *@
+@if (showReceiptModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(43, 23, 12, 0.5);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content elegant-window border-0 p-4">
+                <h5 class="fw-bold mb-4">עסקה הושלמה</h5>
+                <textarea class="clean-input mb-4" rows="5" readonly dir="rtl">@receiptText</textarea>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-secondary" @onclick="CopyAndOpenYpay">העתק ופתח YPAY</button>
+                    <button class="btn-elegant-primary" @onclick="MarkReceiptAsGenerated">סיימתי</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Book> books;
+    private Order newOrder = new Order { OrderItems = new List<OrderItem>() };
+    private string searchTerm = "";
+    private decimal manualDiscount = 0; // משתנה מקומי להנחה
+
+    private bool showReceiptModal = false;
+    private string receiptText = "";
+    private bool copied = false;
+    private int? lastSavedOrderId = null;
+
+    private IEnumerable<Book> FilteredBooks =>
+        books?.Where(b => b.StockQuantity > 0 &&
+                          !b.IsDiscontinued &&
+                          (string.IsNullOrWhiteSpace(searchTerm) ||
+                           b.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                           b.Id.ToString() == searchTerm))
+             ?? Enumerable.Empty<Book>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBooks();
+        newOrder.PaymentMethod = PayType.BITAyelet;
+    }
+
+    private async Task LoadBooks() { books = await DbContext.Books.ToListAsync(); }
+
+    private int GetQuantityInCart(int bookId)
+    {
+        return newOrder.OrderItems.FirstOrDefault(i => i.BookId == bookId)?.Quantity ?? 0;
+    }
+
+    private void AddToCart(Book book)
+    {
+        var existingItem = newOrder.OrderItems.FirstOrDefault(i => i.BookId == book.Id);
+        if (existingItem != null)
+        {
+            if (existingItem.Quantity < book.StockQuantity) existingItem.Quantity++;
+        }
+        else
+        {
+            decimal price = (book.DiscountPrice > 0) ? book.DiscountPrice.Value : book.SellingPrice;
+            newOrder.OrderItems.Add(new OrderItem { BookId = book.Id, Book = book, Quantity = 1, UnitPrice = price });
+        }
+        UpdateTotal();
+    }
+
+    private void RemoveFromCart(OrderItem item) { newOrder.OrderItems.Remove(item); UpdateTotal(); }
+
+    private void UpdateTotal()
+    {
+        var itemsSum = newOrder.OrderItems.Sum(i => i.UnitPrice * i.Quantity);
+        newOrder.TotalAmount = Math.Max(0, itemsSum - manualDiscount); // קיזוז ההנחה מהסה"כ
+    }
+
+    private async Task CompleteSale()
+    {
+        if (!newOrder.OrderItems.Any()) return;
+        foreach (var item in newOrder.OrderItems)
+        {
+            var dbBook = await DbContext.Books.FindAsync(item.BookId);
+            if (dbBook != null) { dbBook.StockQuantity -= item.Quantity; DbContext.Books.Update(dbBook); }
+            item.Book = null;
+        }
+        newOrder.OrderDate = DateTime.Now;
+        newOrder.HasReceipt = false;
+
+        DbContext.Orders.Add(newOrder);
+        await DbContext.SaveChangesAsync();
+        lastSavedOrderId = newOrder.Id;
+
+        string customer = string.IsNullOrWhiteSpace(newOrder.CustomerName) ? "לקוח מזדמן" : newOrder.CustomerName;
+
+        // שימוש בפונקציית העזר כדי שהקבלה תודפס בעברית
+        receiptText = $"עבור: {customer}\nסה\"כ: {newOrder.TotalAmount} ₪ (הנחה: {manualDiscount} ₪)\nתשלום: {GetPaymentDisplayName(newOrder.PaymentMethod)}";
+
+        newOrder = new Order { OrderItems = new List<OrderItem>() };
+        newOrder.PaymentMethod = PayType.BITAyelet;
+        manualDiscount = 0; // איפוס הנחה לעסקה הבאה
+        searchTerm = "";
+        await LoadBooks();
+        showReceiptModal = true;
+    }
+
+    private async Task CopyAndOpenYpay()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", receiptText);
+        await JS.InvokeVoidAsync("window.open", "https://ypay.co.il", "_blank");
+    }
+
+    private async Task MarkReceiptAsGenerated()
+    {
+        if (lastSavedOrderId.HasValue)
+        {
+            var order = await DbContext.Orders.FindAsync(lastSavedOrderId.Value);
+            if (order != null) { order.HasReceipt = true; DbContext.Orders.Update(order); await DbContext.SaveChangesAsync(); }
+        }
+        showReceiptModal = false;
+    }
+
+    private void CloseModalWithoutReceipt() { showReceiptModal = false; }
+
+    // פונקציית עזר להמרת Enum לשם בעברית
+    private string GetPaymentDisplayName(PayType payType)
+    {
+        return payType switch
+        {
+            PayType.BITAyelet => "העברה בBIT לאילת",
+            PayType.BITShilo => "העברה בBIT לשילה",
+            PayType.PAYBOXAyelet => "העברה בPAYBOX לאילת",
+            PayType.PAYBOXShilo => "העברה בPAYBOX לשילה",
+            PayType.Cash => "תשלום מזומן",
+            PayType.Bank => "העברה בנקאית",
+            _ => payType.ToString()
+        };
+    }
+}

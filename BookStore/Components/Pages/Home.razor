@@ -1,0 +1,359 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using BookStore.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+
+<PageTitle>מסך ניהול ראשי</PageTitle>
+
+<style>
+    /* רקע העמוד הכללי - ליצירת ניגודיות */
+    .page-container {
+        background-color: #f2efe9;
+        min-height: 100vh;
+        margin: -24px;
+        padding: 24px;
+    }
+
+    /* החלונות הלבנים ה"צפים" */
+    .elegant-window {
+        background-color: #ffffff;
+        border: 1px solid #dcd3c9;
+        border-radius: 2px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    /* הריבועים הפנימיים לנתונים (ניגודיות מול החלון הלבן) */
+    .stat-sub-card {
+        background-color: #fdfaf5;
+        border: 1px solid #ece8e1;
+        padding: 1.5rem;
+        height: 100%;
+    }
+
+    .section-title {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #2b170c;
+        margin-bottom: 2.5rem;
+        border-right: 6px solid #a98467;
+        padding-right: 15px;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c584c;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    /* הגדלה והבלטה של הנתונים החודשיים */
+    /* הגדלה והבלטה של הנתונים החודשיים */
+    .monthly-stat-number {
+        font-size: 2.8rem; /* הגדלתי מ-2.4 ל-2.8 */
+        font-weight: 500; /* שיניתי מ-800 למשקל רגיל-בינוני, לא בולד */
+        line-height: 1.2;
+    }
+
+    /* צבעים מאוחדים - ירוק ואדום */
+    .color-income {
+        color: #386641 !important;
+    }
+
+    .color-expense {
+        color: #bc4749 !important;
+    }
+
+    .bg-income {
+        background-color: #386641 !important;
+    }
+
+    .bg-expense {
+        background-color: #bc4749 !important;
+    }
+
+    .text-neutral {
+        color: #432818;
+    }
+
+    /* גרפים */
+    .chart-container {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        height: 200px;
+        border-bottom: 1px solid #dcd3c9;
+        padding-bottom: 10px;
+    }
+
+    .bar-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 7%;
+        height: 100%;
+        justify-content: flex-end;
+    }
+
+    .bar-pair {
+        display: flex;
+        align-items: end;
+        gap: 4px;
+        height: 100%;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .bar {
+        width: 14px;
+        transition: height 0.6s ease-out;
+        border-radius: 2px 2px 0 0;
+        cursor: pointer;
+    }
+
+    .month-label {
+        font-size: 0.75rem;
+        color: #6c584c;
+        margin-top: 8px;
+        font-weight: bold;
+    }
+
+    .clean-input {
+        background-color: #f5f2ed;
+        border: 1px solid #dcd3c9;
+        color: #432818;
+        font-weight: 600;
+        padding: 5px 15px;
+        border-radius: 0;
+    }
+
+    .btn-dismiss {
+        font-size: 0.75rem;
+        color: #bc4749;
+        text-decoration: underline;
+        background: none;
+        border: none;
+        padding: 0;
+    }
+</style>
+
+<div dir="rtl" class="page-container">
+    <div class="mb-5">
+        <h2 class="section-title">מסך ניהול ראשי</h2>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center mt-5"><p class="text-muted">מרענן נתונים...</p></div>
+    }
+    else
+    {
+        @* ====================== חלון סיכום חודשי ====================== *@
+        <div class="elegant-window">
+            <div class="d-flex justify-content-between align-items-center mb-5">
+                <h4 class="m-0 fw-bold" style="color: #432818;">נתונים חודשיים</h4>
+                <input type="month" class="clean-input" @bind="selectedMonth" @bind:after="UpdateMonthlyStats" />
+            </div>
+
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <div class="row g-4 text-center">
+                        <div class="col-md-4">
+                            <div class="stat-label">הכנסות</div>
+                            <div class="monthly-stat-number color-income">@monthlyGross ₪</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-label">הוצאות</div>
+                            <div class="monthly-stat-number color-expense">@monthlyExpenses ₪</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-label">רווח נקי</div>
+                            <div class="monthly-stat-number text-neutral">@monthlyNet ₪</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 border-start" style="border-color: #f2efe9 !important;">
+                    <div class="d-flex align-items-end justify-content-center gap-5" style="height: 150px;">
+                        @{
+                            var maxM = Math.Max((double)monthlyGross, Math.Max((double)monthlyExpenses, 1.0));
+                        }
+                        <div class="text-center h-100 d-flex flex-column justify-content-end">
+                            <div class="bar bg-income mx-auto" style="height: @((double)monthlyGross / maxM * 100)%;" title="@monthlyGross ₪"></div>
+                            <div class="month-label">הכנסות</div>
+                        </div>
+                        <div class="text-center h-100 d-flex flex-column justify-content-end">
+                            <div class="bar bg-expense mx-auto" style="height: @((double)monthlyExpenses / maxM * 100)%;" title="@monthlyExpenses ₪"></div>
+                            <div class="month-label">הוצאות</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ====================== חלון מגמה שנתית ====================== *@
+        <div class="elegant-window">
+            <div class="d-flex justify-content-between align-items-center mb-5">
+                <h4 class="m-0 fw-bold" style="color: #432818;">נתונים שנתי - @selectedYear</h4>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" style="border-radius:0" @onclick="() => ChangeYear(-1)">הקודם</button>
+                    <button class="btn btn-sm btn-outline-secondary" style="border-radius:0" @onclick="() => ChangeYear(1)">הבא</button>
+                </div>
+            </div>
+
+            <div class="chart-container mb-2">
+                @if (yearlyData != null && yearlyData.Any())
+                {
+                    var maxYearly = (double)yearlyData.Max(m => Math.Max(m.Gross, m.Expenses));
+                    maxYearly = maxYearly == 0 ? 1 : maxYearly;
+
+                    @foreach (var monthData in yearlyData)
+                    {
+                        <div class="bar-group">
+                            <div class="bar-pair">
+                                <div class="bar bg-income" style="height: @((double)monthData.Gross / maxYearly * 100)%;" title="הכנסות: @monthData.Gross ₪"></div>
+                                <div class="bar bg-expense" style="height: @((double)monthData.Expenses / maxYearly * 100)%;" title="הוצאות: @monthData.Expenses ₪"></div>
+                            </div>
+                            <span class="month-label">@monthData.MonthName</span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        @* ====================== שורת מלאי והתראות ====================== *@
+        <div class="row g-4 mb-5">
+            <div class="col-md-4">
+                <div class="stat-sub-card text-center border">
+                    <div class="stat-label">ערך מלאי נוכחי</div>
+                    <div class="h2 fw-bold text-neutral">@currentInventoryValue ₪</div>
+                    <div class="small text-muted mt-2">שווי הספרים בחנות</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-sub-card border">
+                    <h6 class="stat-label mb-3 color-expense">חסר במלאי</h6>
+                    <div style="max-height: 120px; overflow-y: auto;">
+                        @foreach (var book in outOfStockBooks.Take(5))
+                        {
+                            <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                                <span class="small fw-bold">@book.Name</span>
+                                <button class="btn-dismiss" @onclick="() => DismissAlert(book)">התעלם</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-sub-card border">
+                    <h6 class="stat-label mb-3">מלאי נמוך </h6>
+                    <div style="max-height: 120px; overflow-y: auto;">
+                        @foreach (var book in lowStockBooks.Take(5))
+                        {
+                            <div class="d-flex align-items-center border-bottom py-2 w-100">
+                                <div class="small text-truncate" style="width: 45%;" title="@book.Name">@book.Name</div>
+                                <div class="fw-bold color-expense text-center" style="width: 25%;">@book.StockQuantity</div>
+                                <div class="text-end" style="width: 30%;">
+                                    <button class="btn-dismiss" @onclick="() => DismissAlert(book)">התעלם</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private DateTime selectedMonth = DateTime.Now;
+    private decimal monthlyGross, monthlyNet, monthlyExpenses, currentInventoryValue;
+    private int selectedYear = DateTime.Now.Year;
+
+    private decimal yearlyGross, yearlyNet, yearlyExpenses;
+
+    private List<MonthlyFinancialData> yearlyData = new();
+    private List<Book> outOfStockBooks = new(), lowStockBooks = new();
+
+    protected override async Task OnInitializedAsync() { await RefreshAll(); isLoading = false; }
+
+    private async Task RefreshAll()
+    {
+        await LoadGeneralData();
+        await UpdateMonthlyStats();
+        await UpdateYearlyStats();
+        StateHasChanged();
+    }
+
+    private async Task LoadGeneralData()
+    {
+        var books = await DbContext.Books.ToListAsync();
+        currentInventoryValue = books.Sum(b => b.CostPrice * b.StockQuantity);
+        outOfStockBooks = books.Where(b => b.StockQuantity == 0 && !b.IsDiscontinued).ToList();
+        lowStockBooks = books.Where(b => b.StockQuantity > 0 && b.StockQuantity <= 2 && !b.IsDiscontinued).ToList();
+    }
+
+    private async Task DismissAlert(Book book)
+    {
+        var dbBook = await DbContext.Books.FindAsync(book.Id);
+        if (dbBook != null) { dbBook.IsDiscontinued = true; await DbContext.SaveChangesAsync(); await LoadGeneralData(); }
+    }
+
+    private async Task UpdateMonthlyStats()
+    {
+        var orders = await DbContext.Orders.Include(o => o.OrderItems).ThenInclude(i => i.Book).Where(o => o.OrderDate.Year == selectedMonth.Year && o.OrderDate.Month == selectedMonth.Month).ToListAsync();
+        monthlyGross = orders.Sum(o => o.TotalAmount);
+
+        var pOrders = await DbContext.PurchaseOrders.Include(p => p.Items).Where(p => p.IsReceived && p.OrderDate.Year == selectedMonth.Year && p.OrderDate.Month == selectedMonth.Month).ToListAsync();
+        monthlyExpenses = pOrders.Where(p => !p.IsReturn).Sum(p => p.TotalAmount) - pOrders.Where(p => p.IsReturn).Sum(p => p.TotalAmount);
+
+        var costOfGoodsSold = orders.SelectMany(o => o.OrderItems).Sum(i => i.Quantity * (i.Book?.CostPrice ?? 0));
+        var marginFromSales = monthlyGross - costOfGoodsSold;
+
+        var itemsCostOnly = pOrders.Where(p => !p.IsReturn).SelectMany(p => p.Items).Sum(i => i.Quantity * i.UnitCost)
+                          - pOrders.Where(p => p.IsReturn).SelectMany(p => p.Items).Sum(i => i.Quantity * i.UnitCost);
+        var shippingCosts = monthlyExpenses - itemsCostOnly;
+
+        monthlyNet = marginFromSales - shippingCosts;
+    }
+
+    private async Task ChangeYear(int amount) { selectedYear += amount; await UpdateYearlyStats(); }
+
+    private async Task UpdateYearlyStats()
+    {
+        var yearOrders = await DbContext.Orders.Include(o => o.OrderItems).ThenInclude(i => i.Book).Where(o => o.OrderDate.Year == selectedYear).ToListAsync();
+        var yearPurchases = await DbContext.PurchaseOrders.Include(p => p.Items).Where(p => p.IsReceived && p.OrderDate.Year == selectedYear).ToListAsync();
+
+        yearlyGross = yearOrders.Sum(o => o.TotalAmount);
+        yearlyExpenses = yearPurchases.Where(p => !p.IsReturn).Sum(p => p.TotalAmount) - yearPurchases.Where(p => p.IsReturn).Sum(p => p.TotalAmount);
+
+        var yearlyCostOfGoodsSold = yearOrders.SelectMany(o => o.OrderItems).Sum(i => i.Quantity * (i.Book?.CostPrice ?? 0));
+        var yearlyMargin = yearlyGross - yearlyCostOfGoodsSold;
+
+        var yearlyItemsCost = yearPurchases.Where(p => !p.IsReturn).SelectMany(p => p.Items).Sum(i => i.Quantity * i.UnitCost)
+                            - yearPurchases.Where(p => p.IsReturn).SelectMany(p => p.Items).Sum(i => i.Quantity * i.UnitCost);
+        var yearlyShippingCosts = yearlyExpenses - yearlyItemsCost;
+
+        yearlyNet = yearlyMargin - yearlyShippingCosts;
+
+        string[] hebMonths = { "ינו", "פבר", "מרץ", "אפר", "מאי", "יונ", "יול", "אוג", "ספט", "אוק", "נוב", "דצמ" };
+        yearlyData.Clear();
+        for (int i = 1; i <= 12; i++)
+        {
+            yearlyData.Add(new MonthlyFinancialData
+            {
+                MonthName = hebMonths[i - 1],
+                Gross = yearOrders.Where(o => o.OrderDate.Month == i).Sum(o => o.TotalAmount),
+                Expenses = yearPurchases.Where(p => p.OrderDate.Month == i && !p.IsReturn).Sum(p => p.TotalAmount) - yearPurchases.Where(p => p.OrderDate.Month == i && p.IsReturn).Sum(p => p.TotalAmount)
+            });
+        }
+    }
+
+    private class MonthlyFinancialData { public string MonthName { get; set; } public decimal Gross { get; set; } public decimal Expenses { get; set; } }
+}

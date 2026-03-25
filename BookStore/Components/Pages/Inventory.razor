@@ -1,0 +1,389 @@
+﻿@page "/inventory"
+@rendermode InteractiveServer
+@using BookStore.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject IJSRuntime JS
+
+<PageTitle>קטלוג ומלאי</PageTitle>
+
+<style>
+    /* רקע העמוד הכללי */
+    .page-container {
+        background-color: #f2efe9;
+        min-height: 100vh;
+        margin: -24px;
+        padding: 24px;
+    }
+
+    /* החלונות הלבנים הצפים */
+    .elegant-window {
+        background-color: #ffffff;
+        border: 1px solid #dcd3c9;
+        border-radius: 2px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .section-title {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #2b170c;
+        margin-bottom: 2.5rem;
+        border-right: 6px solid #a98467;
+        padding-right: 15px;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c584c;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    /* טבלה נקייה ובוטיקית */
+    .elegant-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .elegant-table th {
+            color: #6c584c;
+            font-weight: 600;
+            text-align: right;
+            padding: 12px;
+            border-bottom: 2px solid #e3d5ca;
+            font-size: 0.9rem;
+        }
+
+        .elegant-table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #f2efe9;
+            vertical-align: middle;
+            font-size: 0.95rem;
+        }
+
+        .elegant-table tr:hover {
+            background-color: #faf9f6;
+        }
+
+    /* כפתורי פעולה */
+    .btn-elegant-primary {
+        background-color: #432818;
+        color: #f5f2ed;
+        border: none;
+        padding: 8px 20px;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .btn-action-edit {
+        background-color: #e3d5ca;
+        color: #432818;
+        border: none;
+        padding: 5px 12px;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+
+    .btn-action-delete {
+        background-color: transparent;
+        color: #bc4749;
+        border: 1px solid #bc4749;
+        padding: 5px 12px;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+
+    /* אייקון הארכיון החדש */
+    .btn-action-archive {
+        background-color: transparent;
+        color: #8c7e74;
+        border: 1px solid #dcd3c9;
+        padding: 4px 8px;
+        font-size: 0.8rem;
+        border-radius: 2px;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-action-archive:hover {
+            background-color: #f2efe9;
+            color: #432818;
+            border-color: #a98467;
+        }
+
+    .clean-input {
+        background-color: #f5f2ed;
+        border: 1px solid #dcd3c9;
+        color: #432818;
+        padding: 8px 12px;
+        border-radius: 0;
+        width: 100%;
+    }
+
+    .color-expense {
+        color: #bc4749 !important;
+    }
+
+    .text-price {
+        color: #386641;
+        font-weight: 700;
+    }
+</style>
+
+<div dir="rtl" class="page-container">
+    <div class="mb-5">
+        <h2 class="section-title">ניהול קטלוג ומלאי</h2>
+    </div>
+
+    @* ====================== סרגל כלים: חיפוש והוספה ====================== *@
+    <div class="elegant-window">
+        <div class="row align-items-end g-3">
+            <div class="col-md-8">
+                <div class="d-flex justify-content-between align-items-end mb-1">
+                    <label class="stat-label m-0">חיפוש ספר בקטלוג</label>
+                    @* כפתור מעבר בין הקטלוג הפעיל לארכיון *@
+                    <button class="btn btn-link btn-sm text-muted p-0 text-decoration-none" @onclick="ToggleArchiveView">
+                        @(showArchived ? "← חזור לקטלוג הפעיל" : "צפה בארכיון (מוסתרים)")
+                    </button>
+                </div>
+                <input type="search" class="clean-input" placeholder="חיפוש לפי שם, מחבר או מספר מזהה..." @bind="searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="col-md-4 text-end">
+                <button class="btn-elegant-primary w-100" @onclick="OpenAddModal">הוספת ספר חדש</button>
+            </div>
+        </div>
+    </div>
+
+    @* ====================== טבלת המלאי ====================== *@
+    <div class="elegant-window">
+        @if (books == null)
+        {
+            <p class="text-muted text-center py-4">טוען נתונים...</p>
+        }
+        else if (!FilteredBooks.Any())
+        {
+            <div class="py-5 text-center text-muted">לא נמצאו ספרים התואמים לחיפוש.</div>
+        }
+        else
+        {
+            <table class="elegant-table">
+                <thead>
+                    <tr>
+                        @* ---- שינוי רוחב העמודות כאן ---- *@
+                        <th style="width: 90px;">מספר מזהה</th>
+                        <th style="width: 32%;">שם הספר</th>
+                        <th style="width: 15%;">ספק</th>
+                        <th class="text-center" style="width: 10%;">עלות</th>
+                        <th class="text-center" style="width: 10%;">מחיר מכירה</th>
+                        <th class="text-center" style="width: 8%;">מלאי</th>
+                        <th class="text-center" style="width: 15%;">פעולות</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var book in FilteredBooks)
+                    {
+                        <tr style="@(showArchived ? "opacity: 0.8;" : "")">
+                            <td class="small text-muted">@book.Id</td>
+                            <td class="fw-bold">@book.Name</td>
+                            <td class="small">@(book.Supplier?.Name ?? "לא הוגדר")</td>
+                            <td class="text-center small">@book.CostPrice ₪</td>
+                            <td class="text-center text-price">
+                                @(book.DiscountPrice > 0 ? book.DiscountPrice : book.SellingPrice) ₪
+                            </td>
+                            <td class="text-center fw-bold @(book.StockQuantity <= 2 ? "color-expense" : "text-dark")">
+                                @book.StockQuantity
+                            </td>
+                            <td class="text-center">
+                                <div class="d-flex justify-content-center gap-2">
+                                    @* כפתור ארכיון מופיע רק כשאין מלאי *@
+                                    @if (!showArchived && book.StockQuantity == 0)
+                                    {
+                                        <button class="btn-action-archive" title="העברה לארכיון" @onclick="() => ArchiveBook(book)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                                <path d="M0 2a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1v7.5a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 1 12.5V5a1 1 0 0 1-1-1zm2 3v7.5A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5V5zm13-3H1v2h14zM5 7.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5" />
+                                            </svg>
+                                        </button>
+                                    }
+                                    @* כפתור שחזור מהארכיון *@
+                                    @if (showArchived)
+                                    {
+                                        <button class="btn-action-archive" title="שחזור לקטלוג" @onclick="() => RestoreBook(book)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                                <path d="M1.5 1.5A.5.5 0 0 0 1 2v4.8a2.5 2.5 0 0 0 2.5 2.5h9.793l-3.347 3.146a.5.5 0 0 0 .708.708l4.2-3.954a.5.5 0 0 0 0-.708l-4.2-3.954a.5.5 0 0 0-.708.708l3.347 3.146H3.5A1.5 1.5 0 0 1 2 6.8V2a.5.5 0 0 0-.5-.5z" />
+                                            </svg>
+                                        </button>
+                                    }
+
+                                    <button class="btn-action-edit" @onclick="() => OpenEditModal(book)">עריכה</button>
+                                    <button class="btn-action-delete" @onclick="() => DeleteBook(book)">מחיקה</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@* ====================== מודל הוספה / עריכה ====================== *@
+@if (showModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(43, 23, 12, 0.5);" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content elegant-window border-0 p-4 shadow-lg">
+                <h5 class="fw-bold mb-4">@((editingBook.Id == 0) ? "הוספת ספר חדש" : "עריכת פרטי ספר")</h5>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="stat-label">שם הספר</label>
+                        <input type="text" class="clean-input" @bind="editingBook.Name" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="stat-label">ספק</label>
+                        <select class="clean-input" @bind="editingBook.SupplierId">
+                            <option value="">בחר ספק...</option>
+                            @foreach (var sup in suppliers)
+                            {
+                                <option value="@sup.Id">@sup.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="stat-label">עלות רכישה (₪)</label>
+                        <input type="number" class="clean-input" @bind="editingBook.CostPrice" step="0.5" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="stat-label">מחירון (₪)</label>
+                        <input type="number" class="clean-input" @bind="editingBook.SellingPrice" step="0.5" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="stat-label">כמות במלאי</label>
+                        <input type="number" class="clean-input" @bind="editingBook.StockQuantity" />
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-5">
+                    <button class="btn btn-sm text-muted px-4" @onclick="CloseModal">ביטול</button>
+                    <button class="btn-elegant-primary px-5" @onclick="SaveBook">שמור ספר</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Book> books;
+    private List<Supplier> suppliers;
+    private Book editingBook = new();
+    private bool showModal = false;
+    private string searchTerm = "";
+
+    // משתנה לניהול תצוגת הארכיון
+    private bool showArchived = false;
+
+    // הסינון כולל עכשיו את בדיקת הסטטוס (מוסתר/פעיל)
+    private IEnumerable<Book> FilteredBooks => books?
+        .Where(b => b.IsDiscontinued == showArchived &&
+                    (string.IsNullOrWhiteSpace(searchTerm) ||
+                     b.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                     b.Id.ToString() == searchTerm))
+        .OrderBy(b => b.Name) ?? Enumerable.Empty<Book>();
+
+    protected override async Task OnInitializedAsync() { await LoadData(); }
+
+    private async Task LoadData()
+    {
+        books = await DbContext.Books.Include(b => b.Supplier).ToListAsync();
+        suppliers = await DbContext.Suppliers.ToListAsync();
+    }
+
+    private void ToggleArchiveView()
+    {
+        showArchived = !showArchived;
+        searchTerm = ""; // איפוס חיפוש במעבר
+    }
+
+    private async Task ArchiveBook(Book book)
+    {
+        book.IsDiscontinued = true;
+        DbContext.Books.Update(book);
+        await DbContext.SaveChangesAsync();
+        await LoadData();
+    }
+
+    private async Task RestoreBook(Book book)
+    {
+        book.IsDiscontinued = false;
+        DbContext.Books.Update(book);
+        await DbContext.SaveChangesAsync();
+        await LoadData();
+    }
+
+    private void OpenAddModal()
+    {
+        editingBook = new Book { StockQuantity = 0, IsDiscontinued = false };
+        showModal = true;
+    }
+
+    private void OpenEditModal(Book book)
+    {
+        editingBook = new Book
+        {
+            Id = book.Id,
+            Name = book.Name,
+            SupplierId = book.SupplierId,
+            CostPrice = book.CostPrice,
+            SellingPrice = book.SellingPrice,
+            StockQuantity = book.StockQuantity,
+            DiscountPrice = book.DiscountPrice,
+            IsDiscontinued = book.IsDiscontinued
+        };
+        showModal = true;
+    }
+
+    private void CloseModal() { showModal = false; }
+
+    private async Task SaveBook()
+    {
+        if (string.IsNullOrWhiteSpace(editingBook.Name)) return;
+
+        if (editingBook.Id == 0) DbContext.Books.Add(editingBook);
+        else
+        {
+            var dbBook = await DbContext.Books.FindAsync(editingBook.Id);
+            if (dbBook != null)
+            {
+                dbBook.Name = editingBook.Name;
+                dbBook.SupplierId = editingBook.SupplierId;
+                dbBook.CostPrice = editingBook.CostPrice;
+                dbBook.SellingPrice = editingBook.SellingPrice;
+                dbBook.StockQuantity = editingBook.StockQuantity;
+                dbBook.IsDiscontinued = editingBook.IsDiscontinued;
+            }
+        }
+        await DbContext.SaveChangesAsync();
+        await LoadData();
+        showModal = false;
+    }
+
+    private async Task DeleteBook(Book book)
+    {
+        bool confirm = await JS.InvokeAsync<bool>("confirm", $"האם אתה בטוח שברצונך למחוק את '{book.Name}' מהמערכת?");
+        if (confirm)
+        {
+            DbContext.Books.Remove(book);
+            await DbContext.SaveChangesAsync();
+            await LoadData();
+        }
+    }
+}

@@ -1,0 +1,655 @@
+﻿@page "/supplier-orders"
+@rendermode InteractiveServer
+@using BookStore.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject IJSRuntime JS
+
+<PageTitle>ספרי כהן - רכש והחזרות</PageTitle>
+
+<style>
+    .page-container {
+        background-color: #f2efe9;
+        min-height: 100vh;
+        margin: -24px;
+        padding: 24px;
+    }
+
+    .elegant-window {
+        background-color: #ffffff;
+        border: 1px solid #dcd3c9;
+        border-radius: 2px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .section-title {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #2b170c;
+        margin-bottom: 2.5rem;
+        border-right: 6px solid #a98467;
+        padding-right: 15px;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c584c;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .clean-input {
+        background-color: #f5f2ed;
+        border: 1px solid #dcd3c9;
+        color: #432818;
+        padding: 8px 12px;
+        width: 100%;
+        border-radius: 0;
+    }
+
+    .btn-elegant-primary {
+        background-color: #432818;
+        color: #f5f2ed;
+        border: none;
+        padding: 10px 20px;
+        font-weight: 600;
+    }
+
+    /* טאבים נקיים */
+    .mode-tabs {
+        display: flex;
+        gap: 2px;
+        margin-bottom: -1px;
+    }
+
+    .mode-tab {
+        padding: 10px 25px;
+        cursor: pointer;
+        background-color: #ede9e3;
+        border: 1px solid #dcd3c9;
+        color: #6c584c;
+        font-weight: 600;
+    }
+
+        .mode-tab.active {
+            background-color: #ffffff;
+            border-bottom: 1px solid white;
+            color: #2b170c;
+        }
+
+    .book-selection-card {
+        background-color: #fdfaf5;
+        border: 1px solid #ece8e1;
+        padding: 10px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+        .book-selection-card:hover {
+            background-color: #f2eee4;
+        }
+
+    .text-price {
+        color: #386641;
+        font-weight: 700;
+    }
+
+    .color-expense {
+        color: #bc4749;
+    }
+
+    .elegant-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .elegant-table th {
+            color: #6c584c;
+            font-weight: 600;
+            text-align: right;
+            padding: 12px;
+            border-bottom: 2px solid #e3d5ca;
+            font-size: 0.85rem;
+        }
+
+        .elegant-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f2efe9;
+            vertical-align: middle;
+            font-size: 0.9rem;
+        }
+
+    /* שורות לחיצות לטבלאות */
+    .clickable-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+        .clickable-row:hover {
+            background-color: #faf9f6;
+        }
+
+    .btn-action-edit {
+        background-color: #e3d5ca;
+        color: #432818;
+        border: none;
+        padding: 5px 12px;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+</style>
+
+<div dir="rtl" class="page-container">
+    <div class="mb-5">
+        <h2 class="section-title">רכש והחזרות ספקים</h2>
+    </div>
+
+    <div class="row g-4">
+        @* ---------- טור ימין: בחירת ספק והערות ---------- *@
+        <div class="col-md-4">
+            <div class="elegant-window h-100 p-4">
+                <label class="stat-label">1. בחירת ספק</label>
+                <select class="clean-input mb-4" @onchange="OnSupplierSelected">
+                    <option value="">-- בחר ספק מהרשימה --</option>
+                    @foreach (var sup in suppliers)
+                    {
+                        <option value="@sup.Id">@sup.Name</option>
+                    }
+                </select>
+
+                @if (selectedSupplier != null)
+                {
+                    <div class="p-3 mb-3" style="background-color: #fdfaf5; border: 1px solid #ece8e1;">
+                        <div class="stat-label">פרטי התקשרות</div>
+                        <div class="fw-bold mb-1">@selectedSupplier.Name</div>
+                        <div class="small text-muted">@selectedSupplier.Phone</div>
+                        <div class="small text-muted">@selectedSupplier.Email</div>
+                    </div>
+
+                    @* כרטיס הערות ספק - עכשיו ניתן לעריכה *@
+                    <div class="p-3" style="background-color: #faf9f6; border: 1px solid #dcd3c9; border-right: 4px solid #a98467;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="stat-label m-0">הערות לספק זה</div>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0" style="font-size:0.8rem; color:#432818;" @onclick="SaveSupplierNotes">שמור שינויים</button>
+                        </div>
+                        <textarea class="clean-input" rows="4" @bind="selectedSupplier.Notes" placeholder="הקלידי הערות כאן..."></textarea>
+                        @if (notesSaved)
+                        {
+                            <div class="text-success small mt-1 fw-bold">נשמר בהצלחה!</div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ---------- טור שמאל: בניית הרשימה ---------- *@
+        <div class="col-md-8">
+            <div class="mode-tabs">
+                <div class="mode-tab @(!isReturnMode ? "active" : "")" @onclick="() => SwitchMode(false)">הזמנת רכש</div>
+                <div class="mode-tab @(isReturnMode ? "active" : "")" @onclick="() => SwitchMode(true)">החזרה לספק</div>
+            </div>
+            <div class="elegant-window">
+                @if (selectedSupplier == null)
+                {
+                    <div class="py-5 text-center text-muted">בחר ספק מימין כדי להתחיל.</div>
+                }
+                else
+                {
+                    <div class="d-flex gap-2 mb-4">
+                        <input type="search" class="clean-input" placeholder="חפש ספר בקטלוג..." @bind="searchTerm" @bind:event="oninput" />
+                        @* כפתור הוספת ספר מהיר לספק הנבחר *@
+                        <button class="btn-elegant-primary text-nowrap" style="padding: 8px 15px;" @onclick="OpenAddBookModal">ספר חדש</button>
+                    </div>
+
+                    <div class="row g-2 mb-4" style="max-height: 200px; overflow-y: auto;">
+                        @foreach (var book in FilteredSupplierBooks)
+                        {
+                            <div class="col-md-6">
+                                <div class="book-selection-card d-flex justify-content-between align-items-center" @onclick="() => AddBookToDraft(book)">
+                                    <div class="small fw-bold">@book.Name</div>
+                                    <div class="small text-muted">@book.CostPrice ₪</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (draftItems.Any())
+                    {
+                        <div class="stat-label mb-2">פריטים ברשימה</div>
+                        <div class="table-responsive mb-4">
+                            <table class="table table-sm align-middle">
+                                <thead>
+                                    <tr class="small text-muted">
+                                        <th>ספר</th>
+                                        <th style="width: 80px;">כמות</th>
+                                        <th class="text-end">סה"כ</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in draftItems)
+                                    {
+                                        <tr>
+                                            <td class="small fw-bold">@item.BookName</td>
+                                            <td><input type="number" class="clean-input p-1 text-center" @bind="item.Quantity" min="1" /></td>
+                                            <td class="text-end small">@(item.Quantity* item.ExpectedCost) ₪</td>
+                                            <td class="text-end"><button class="btn btn-sm text-muted" @onclick="() => draftItems.Remove(item)">ביטול</button></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @* הוספת דמי משלוח *@
+                        <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
+                            <label class="stat-label m-0">דמי משלוח (₪)</label>
+                            <input type="number" class="clean-input text-center" style="width: 100px; padding: 4px;" @bind="shippingCost" min="0" step="1" />
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                            <div class="h5 m-0 fw-bold">סה"כ: @DraftTotal ₪</div>
+                            <button class="btn-elegant-primary" @onclick="SaveOrderAsPending">שמור ושלח הודעה</button>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    @* ---------- רשימת פעולות בדרך ---------- *@
+    <h4 class="stat-label mt-5 mb-3">הזמנות בהמתנה</h4>
+    <div class="elegant-window mb-5">
+        @if (!pendingOrders.Any())
+        {
+            <p class="text-muted small text-center py-3">אין פעולות בדרך כרגע.</p>
+        }
+        else
+        {
+            <table class="elegant-table">
+                <thead>
+                    <tr>
+                        <th>תאריך</th>
+                        <th>סוג</th>
+                        <th>ספק</th>
+                        <th>סכום</th>
+                        <th class="text-center">פעולות</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var order in pendingOrders)
+                    {
+                        <tr class="clickable-row" @ondblclick="() => OpenEditOrderModal(order)">
+                            <td class="small text-muted">@order.OrderDate.ToString("dd/MM/yyyy")</td>
+                            <td><span class="small fw-bold @(order.IsReturn ? "color-expense" : "text-success")">@(order.IsReturn ? "החזרה" : "רכישה")</span></td>
+                            <td class="small fw-bold">@order.Supplier?.Name</td>
+                            <td class="small">@order.TotalAmount ₪</td>
+                            <td class="text-center">
+                                <button class="btn-action-edit" style="background-color: #432818; color: #f5f2ed;" @onclick="() => ReceiveOrder(order)" @onclick:stopPropagation="true">@(order.IsReturn ? "אישור זיכוי" : "קבלת סחורה")</button>
+                                <button class="btn-action-edit ms-1" @onclick="() => OpenEditOrderModal(order)" @onclick:stopPropagation="true">עריכה</button>
+                                <button class="btn btn-sm text-muted ms-1" @onclick="() => DeleteOrder(order)" @onclick:stopPropagation="true">ביטול</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @* ---------- היסטוריית הזמנות שאושרו ---------- *@
+    <h4 class="stat-label mb-3">היסטוריית הזמנות שהושלמו</h4>
+    <div class="elegant-window">
+        @if (!completedOrders.Any())
+        {
+            <p class="text-muted small text-center py-3">אין היסטוריית הזמנות.</p>
+        }
+        else
+        {
+            <div style="max-height: 300px; overflow-y: auto;">
+                <table class="elegant-table">
+                    <thead>
+                        <tr>
+                            <th>תאריך</th>
+                            <th>סוג</th>
+                            <th>ספק</th>
+                            <th>סכום</th>
+                            <th>סטטוס</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in completedOrders)
+                        {
+                            <tr class="clickable-row" @ondblclick="() => OpenViewOrderModal(order)">
+                                <td class="small text-muted">@order.OrderDate.ToString("dd/MM/yyyy")</td>
+                                <td><span class="small fw-bold @(order.IsReturn ? "color-expense" : "text-success")">@(order.IsReturn ? "החזרה" : "רכישה")</span></td>
+                                <td class="small fw-bold">@order.Supplier?.Name</td>
+                                <td class="small">@order.TotalAmount ₪</td>
+                                <td class="small text-muted">הושלם</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@* ---------- מודלים קופצים ---------- *@
+
+@if (showWhatsappModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(43, 23, 12, 0.5);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content elegant-window border-0 p-4 shadow-lg">
+                <h5 class="fw-bold mb-3" style="color: #2b170c;">הודעה מוכנה לשליחה</h5>
+                <textarea class="clean-input mb-3" rows="5" readonly dir="rtl">@whatsappMessage</textarea>
+                <button class="btn-elegant-primary w-100" @onclick="CopyToClipboard">העתק הודעה וסגור</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showAddBookModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(43, 23, 12, 0.5);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content elegant-window border-0 p-4 shadow-lg">
+                <h5 class="fw-bold mb-3" style="color: #2b170c;">הוספת ספר ל-@selectedSupplier?.Name</h5>
+
+                <div class="mb-3">
+                    <label class="stat-label">שם הספר</label>
+                    <input type="text" class="clean-input" @bind="newBook.Name" />
+                </div>
+
+                <div class="row g-2 mb-4">
+                    <div class="col-6">
+                        <label class="stat-label">עלות רכש (₪)</label>
+                        <input type="number" class="clean-input" @bind="newBook.CostPrice" step="0.5" />
+                    </div>
+                    <div class="col-6">
+                        <label class="stat-label">מחיר מכירה (₪)</label>
+                        <input type="number" class="clean-input" @bind="newBook.SellingPrice" step="0.5" />
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm text-muted px-3" @onclick="() => showAddBookModal = false">ביטול</button>
+                    <button class="btn-elegant-primary px-4 py-2" @onclick="SaveNewBook">שמור ספר בקטלוג</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* מודל עריכה וצפייה בהזמנה *@
+@if (editingPurchaseOrder != null)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(43, 23, 12, 0.5);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content elegant-window border-0 p-4 shadow-lg">
+                <h5 class="fw-bold mb-4" style="color: #2b170c;">
+                    @(isViewOnlyMode ? "פרטי הזמנה" : "עריכת הזמנה") - @editingPurchaseOrder.Supplier?.Name
+                </h5>
+
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr class="small text-muted">
+                                <th>ספר</th>
+                                <th style="width: 100px;" class="text-center">כמות</th>
+                                <th style="width: 120px;" class="text-center">עלות יחידה</th>
+                                <th class="text-end">סה"כ</th>
+                                @if (!isViewOnlyMode)
+                                {
+                                    <th></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in editingPurchaseOrder.Items.ToList())
+                            {
+                                <tr>
+                                    <td class="small fw-bold">@item.Book?.Name</td>
+                                    @if (isViewOnlyMode)
+                                    {
+                                        <td class="text-center">@item.Quantity</td>
+                                        <td class="text-center">@item.UnitCost ₪</td>
+                                    }
+                                    else
+                                    {
+                                        <td><input type="number" class="clean-input p-1 text-center" @bind="item.Quantity" @bind:after="UpdateEditingOrderTotal" min="1" /></td>
+                                        <td><input type="number" class="clean-input p-1 text-center" @bind="item.UnitCost" @bind:after="UpdateEditingOrderTotal" step="0.5" min="0" /></td>
+                                    }
+                                    <td class="text-end small">@(item.Quantity* item.UnitCost) ₪</td>
+                                    @if (!isViewOnlyMode)
+                                    {
+                                        <td class="text-end"><button class="btn btn-sm text-muted" @onclick="() => RemoveItemFromEdit(item)">מחק</button></td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+                    <div class="stat-label m-0">משלוח / התאמות (₪)</div>
+                    @if (isViewOnlyMode)
+                    {
+                        <div class="fw-bold">@editAdjustment ₪</div>
+                    }
+                    else
+                    {
+                        <input type="number" class="clean-input text-center" style="width: 100px; padding: 4px;" @bind="editAdjustment" @bind:after="UpdateEditingOrderTotal" step="1" />
+                    }
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                    <div class="h5 m-0 fw-bold">סה"כ סופי: @editingPurchaseOrder.TotalAmount ₪</div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm text-muted px-3" @onclick="CloseOrderModal">סגור</button>
+                        @if (!isViewOnlyMode)
+                        {
+                            <button class="btn-elegant-primary px-4 py-2" @onclick="SaveEditedOrder">שמור שינויים</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Supplier> suppliers = new();
+    private List<Book> books = new();
+    private List<PurchaseOrder> allOrders = new();
+    private Supplier selectedSupplier;
+    private bool isReturnMode = false, showWhatsappModal = false;
+    private string searchTerm = "", whatsappMessage = "";
+    private List<DraftItem> draftItems = new();
+    private bool notesSaved = false;
+
+    // משתנה דמי משלוח
+    private decimal shippingCost = 0;
+
+    // למודל הוספת ספר
+    private bool showAddBookModal = false;
+    private Book newBook = new();
+
+    // משתני מודל צפייה ועריכה בהזמנה
+    private PurchaseOrder editingPurchaseOrder = null;
+    private bool isViewOnlyMode = false;
+    private decimal editAdjustment = 0;
+
+    // חישוב הסך הכל כולל את דמי המשלוח
+    private decimal DraftTotal => draftItems.Sum(i => i.Quantity * i.ExpectedCost) + shippingCost;
+
+    private IEnumerable<Book> FilteredSupplierBooks => books?
+        .Where(b => (b.SupplierId == selectedSupplier?.Id) &&
+                    (string.IsNullOrWhiteSpace(searchTerm) || b.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))) ?? Enumerable.Empty<Book>();
+
+    private IEnumerable<PurchaseOrder> pendingOrders => allOrders.Where(o => !o.IsReceived).OrderByDescending(o => o.OrderDate);
+    private IEnumerable<PurchaseOrder> completedOrders => allOrders.Where(o => o.IsReceived).OrderByDescending(o => o.OrderDate);
+
+    protected override async Task OnInitializedAsync() { await LoadData(); }
+
+    private async Task LoadData()
+    {
+        suppliers = await DbContext.Suppliers.ToListAsync();
+        books = await DbContext.Books.ToListAsync();
+        allOrders = await DbContext.PurchaseOrders.Include(o => o.Supplier).Include(o => o.Items).ThenInclude(i => i.Book).ToListAsync();
+    }
+
+    private void SwitchMode(bool mode) { isReturnMode = mode; draftItems.Clear(); shippingCost = 0; }
+
+    private async Task OnSupplierSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int id)) selectedSupplier = await DbContext.Suppliers.FindAsync(id);
+        else selectedSupplier = null;
+        draftItems.Clear();
+        shippingCost = 0;
+    }
+
+    // --- שמירת הערות ---
+    private async Task SaveSupplierNotes()
+    {
+        if (selectedSupplier != null)
+        {
+            DbContext.Suppliers.Update(selectedSupplier);
+            await DbContext.SaveChangesAsync();
+            notesSaved = true;
+            await Task.Delay(2000); // מציג את הודעת ההצלחה ל-2 שניות
+            notesSaved = false;
+            StateHasChanged();
+        }
+    }
+
+    // --- הוספת ספר מהיר ---
+    private void OpenAddBookModal()
+    {
+        newBook = new Book { SupplierId = selectedSupplier.Id, StockQuantity = 0 };
+        showAddBookModal = true;
+    }
+
+    private async Task SaveNewBook()
+    {
+        if (!string.IsNullOrWhiteSpace(newBook.Name))
+        {
+            DbContext.Books.Add(newBook);
+            await DbContext.SaveChangesAsync();
+            await LoadData();
+            showAddBookModal = false;
+
+            // מוסיף את הספר החדש אוטומטית לעגלת הרכש הנוכחית
+            AddBookToDraft(newBook);
+        }
+    }
+
+    private void AddBookToDraft(Book b)
+    {
+        var existing = draftItems.FirstOrDefault(d => d.BookId == b.Id);
+        if (existing != null) existing.Quantity++;
+        else draftItems.Add(new DraftItem { BookId = b.Id, BookName = b.Name, Quantity = 1, ExpectedCost = b.CostPrice });
+    }
+
+    private async Task SaveOrderAsPending()
+    {
+        if (selectedSupplier == null || !draftItems.Any()) return;
+        var order = new PurchaseOrder { SupplierId = selectedSupplier.Id, OrderDate = DateTime.Now, IsReceived = false, IsReturn = isReturnMode, Items = new List<PurchaseOrderItem>() };
+        foreach (var i in draftItems) order.Items.Add(new PurchaseOrderItem { BookId = i.BookId, Quantity = i.Quantity, UnitCost = i.ExpectedCost });
+        order.TotalAmount = DraftTotal; // שומר את הסך הכל כולל המשלוח אל תוך ההזמנה!
+
+        DbContext.PurchaseOrders.Add(order); await DbContext.SaveChangesAsync();
+
+        whatsappMessage = (isReturnMode ? "רשימת ספרים להחזרה:\n" : "רשימת ספרים להזמנה:\n") + string.Join("\n", draftItems.Select(i => $"{i.Quantity} x {i.BookName}"));
+        if (shippingCost > 0)
+        {
+            whatsappMessage += $"\nדמי משלוח: {shippingCost} ₪";
+        }
+        whatsappMessage += $"\nסה\"כ: {DraftTotal} ₪";
+
+        draftItems.Clear();
+        shippingCost = 0;
+        showWhatsappModal = true;
+        await LoadData();
+    }
+
+    private async Task ReceiveOrder(PurchaseOrder o)
+    {
+        foreach (var i in o.Items)
+        {
+            var b = await DbContext.Books.FindAsync(i.BookId);
+            if (b != null) b.StockQuantity += (o.IsReturn ? -i.Quantity : i.Quantity);
+        }
+        o.IsReceived = true; await DbContext.SaveChangesAsync(); await LoadData();
+    }
+
+    private async Task DeleteOrder(PurchaseOrder o)
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "לבטל את הפעולה?"))
+        {
+            DbContext.PurchaseOrders.Remove(o); await DbContext.SaveChangesAsync(); await LoadData();
+        }
+    }
+
+    private async Task CopyToClipboard() { await JS.InvokeVoidAsync("navigator.clipboard.writeText", whatsappMessage); showWhatsappModal = false; }
+
+    // --- צפייה ועריכה של הזמנה ---
+
+    private void OpenEditOrderModal(PurchaseOrder order)
+    {
+        editingPurchaseOrder = order;
+        isViewOnlyMode = false;
+        editAdjustment = order.TotalAmount - order.Items.Sum(i => i.Quantity * i.UnitCost);
+    }
+
+    private void OpenViewOrderModal(PurchaseOrder order)
+    {
+        editingPurchaseOrder = order;
+        isViewOnlyMode = true;
+        editAdjustment = order.TotalAmount - order.Items.Sum(i => i.Quantity * i.UnitCost);
+    }
+
+    private async Task CloseOrderModal()
+    {
+        // מחיקת שינויים שלא נשמרו וטעינה מחדש מהמסד
+        if (!isViewOnlyMode)
+        {
+            DbContext.ChangeTracker.Clear();
+            await LoadData();
+        }
+        editingPurchaseOrder = null;
+    }
+
+    private void UpdateEditingOrderTotal()
+    {
+        if (editingPurchaseOrder != null)
+        {
+            editingPurchaseOrder.TotalAmount = editingPurchaseOrder.Items.Sum(i => i.Quantity * i.UnitCost) + editAdjustment;
+        }
+    }
+
+    private void RemoveItemFromEdit(PurchaseOrderItem item)
+    {
+        editingPurchaseOrder.Items.Remove(item);
+        DbContext.Entry(item).State = EntityState.Deleted;
+        UpdateEditingOrderTotal();
+    }
+
+    private async Task SaveEditedOrder()
+    {
+        if (editingPurchaseOrder != null && editingPurchaseOrder.Items.Any())
+        {
+            DbContext.PurchaseOrders.Update(editingPurchaseOrder);
+            await DbContext.SaveChangesAsync();
+            await LoadData();
+            editingPurchaseOrder = null;
+        }
+    }
+
+    private class DraftItem { public int BookId { get; set; } public string BookName { get; set; } public int Quantity { get; set; } public decimal ExpectedCost { get; set; } }
+}

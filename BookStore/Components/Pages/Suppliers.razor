@@ -1,0 +1,266 @@
+﻿@page "/suppliers"
+@rendermode InteractiveServer
+@using BookStore.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject IJSRuntime JS
+
+<PageTitle>ניהול ספקים</PageTitle>
+
+<style>
+    .page-container {
+        background-color: #f2efe9;
+        min-height: 100vh;
+        margin: -24px;
+        padding: 24px;
+    }
+
+    .elegant-window {
+        background-color: #ffffff;
+        border: 1px solid #dcd3c9;
+        border-radius: 2px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .section-title {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #2b170c;
+        margin-bottom: 2.5rem;
+        border-right: 6px solid #a98467;
+        padding-right: 15px;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c584c;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .elegant-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .elegant-table th {
+            color: #6c584c;
+            font-weight: 600;
+            text-align: right;
+            padding: 12px;
+            border-bottom: 2px solid #e3d5ca;
+            font-size: 0.9rem;
+        }
+
+        .elegant-table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #f2efe9;
+            vertical-align: middle;
+            font-size: 0.95rem;
+        }
+
+        .elegant-table tr:hover {
+            background-color: #faf9f6;
+        }
+
+    /* עיצוב מיוחד לעמודת ההערות בטבלה */
+    .notes-cell {
+        font-size: 0.85rem;
+        color: #5d4a3e;
+        max-width: 250px;
+        white-space: pre-wrap; /* שומר על ירידת שורות מה-textarea */
+        line-height: 1.4;
+    }
+
+    .btn-elegant-primary {
+        background-color: #432818;
+        color: #f5f2ed;
+        border: none;
+        padding: 8px 20px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .btn-elegant-primary:hover {
+            background-color: #2b170c;
+            color: #ffffff;
+        }
+
+    .btn-action-edit {
+        background-color: #e3d5ca;
+        color: #432818;
+        border: none;
+        padding: 5px 12px;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+
+    .btn-action-delete {
+        background-color: transparent;
+        color: #bc4749;
+        border: 1px solid #bc4749;
+        padding: 5px 12px;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+
+    .clean-input {
+        background-color: #f5f2ed;
+        border: 1px solid #dcd3c9;
+        color: #432818;
+        padding: 8px 12px;
+        width: 100%;
+        border-radius: 0;
+    }
+
+        .clean-input:focus {
+            outline: none;
+            border-color: #a98467;
+            background-color: #ffffff;
+        }
+</style>
+
+<div dir="rtl" class="page-container">
+    <div class="mb-5">
+        <h2 class="section-title">ניהול ספקים</h2>
+    </div>
+
+    <div class="elegant-window">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="stat-label">רשימת ספקים פעילים</div>
+            <button class="btn-elegant-primary" @onclick="OpenAddModal">הוספת ספק חדש</button>
+        </div>
+
+        @if (suppliers == null)
+        {
+            <p class="text-muted">טוען נתוני ספקים...</p>
+        }
+        else
+        {
+            <table class="elegant-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>שם הספק</th>
+                        <th>טלפון</th>
+                        <th>דוא"ל</th>
+                        <th>הערות ומידע נוסף</th> @* העמודה החדשה *@
+                        <th class="text-center">פעולות</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var sup in suppliers)
+                    {
+                        <tr>
+                            <td class="small text-muted">@sup.Id</td>
+                            <td class="fw-bold">@sup.Name</td>
+                            <td dir="ltr" class="text-end">@sup.Phone</td>
+                            <td>@sup.Email</td>
+                            <td class="notes-cell">@sup.Notes</td> @* הצגת ההערות *@
+                            <td class="text-center">
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button class="btn-action-edit" @onclick="() => OpenEditModal(sup)">עריכה</button>
+                                    <button class="btn-action-delete" @onclick="() => DeleteSupplier(sup)">מחיקה</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(43, 23, 12, 0.5);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content elegant-window border-0 p-4 shadow-lg">
+                <h5 class="fw-bold mb-4" style="color: #2b170c;">פרטי ספק</h5>
+
+                <div class="mb-3">
+                    <label class="stat-label">שם הספק</label>
+                    <input type="text" class="clean-input" @bind="editingSupplier.Name" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="stat-label">טלפון</label>
+                    <input type="text" class="clean-input" @bind="editingSupplier.Phone" dir="ltr" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="stat-label">דוא"ל</label>
+                    <input type="email" class="clean-input" @bind="editingSupplier.Email" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="stat-label">הערות ומידע נוסף</label>
+                    <textarea class="clean-input" rows="4" @bind="editingSupplier.Notes" placeholder="ימי חלוקה, תנאי תשלום, הנחות מיוחדות..."></textarea>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <button class="btn btn-sm text-muted px-3" @onclick="() => showModal = false">ביטול</button>
+                    <button class="btn-elegant-primary px-4" @onclick="SaveSupplier">שמור ספק</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Supplier> suppliers;
+    private Supplier editingSupplier = new();
+    private bool showModal = false;
+
+    protected override async Task OnInitializedAsync() { await LoadData(); }
+
+    private async Task LoadData() { suppliers = await DbContext.Suppliers.ToListAsync(); }
+
+    private void OpenAddModal() { editingSupplier = new(); showModal = true; }
+
+    private void OpenEditModal(Supplier s)
+    {
+        editingSupplier = new Supplier
+        {
+            Id = s.Id,
+            Name = s.Name,
+            Phone = s.Phone,
+            Email = s.Email,
+            Notes = s.Notes
+        };
+        showModal = true;
+    }
+
+    private async Task SaveSupplier()
+    {
+        if (string.IsNullOrWhiteSpace(editingSupplier.Name)) return;
+
+        if (editingSupplier.Id == 0) DbContext.Suppliers.Add(editingSupplier);
+        else
+        {
+            var db = await DbContext.Suppliers.FindAsync(editingSupplier.Id);
+            if (db != null)
+            {
+                db.Name = editingSupplier.Name;
+                db.Phone = editingSupplier.Phone;
+                db.Email = editingSupplier.Email;
+                db.Notes = editingSupplier.Notes;
+            }
+        }
+        await DbContext.SaveChangesAsync(); await LoadData(); showModal = false;
+    }
+
+    private async Task DeleteSupplier(Supplier s)
+    {
+        if (await JS.InvokeAsync<bool>("confirm", $"האם למחוק את הספק {s.Name}?"))
+        {
+            DbContext.Suppliers.Remove(s); await DbContext.SaveChangesAsync(); await LoadData();
+        }
+    }
+}

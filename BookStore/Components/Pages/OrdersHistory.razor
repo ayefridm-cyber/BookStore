@@ -1,0 +1,365 @@
+﻿@page "/orders-history"
+@rendermode InteractiveServer
+@using BookStore.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject IJSRuntime JS
+
+<PageTitle>היסטוריית מכירות</PageTitle>
+
+<style>
+    /* רקע העמוד הכללי */
+    .page-container {
+        background-color: #f2efe9;
+        min-height: 100vh;
+        margin: -24px;
+        padding: 24px;
+    }
+
+    /* החלונות הלבנים הצפים */
+    .elegant-window {
+        background-color: #ffffff;
+        border: 1px solid #dcd3c9;
+        border-radius: 2px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .section-title {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #2b170c;
+        margin-bottom: 2.5rem;
+        border-right: 6px solid #a98467;
+        padding-right: 15px;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6c584c;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    /* טבלה נקייה */
+    .elegant-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .elegant-table th {
+            color: #6c584c;
+            font-weight: 600;
+            text-align: right;
+            padding: 12px;
+            border-bottom: 2px solid #e3d5ca;
+            font-size: 0.9rem;
+        }
+
+        .elegant-table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #f2efe9;
+            vertical-align: middle;
+        }
+
+    .clickable-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+        .clickable-row:hover {
+            background-color: #faf9f6;
+        }
+
+    /* כפתורי פעולה */
+    .btn-action-edit {
+        background-color: #e3d5ca;
+        color: #432818;
+        border: none;
+        padding: 6px 14px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .btn-action-delete {
+        background-color: transparent;
+        color: #bc4749;
+        border: 1px solid #bc4749;
+        padding: 6px 14px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+        .btn-action-delete:hover {
+            background-color: #bc4749;
+            color: white;
+        }
+
+    /* סטטוס קבלה נקי ללא כפתור מכוער */
+    .receipt-status {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        transition: transform 0.1s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+    }
+
+        .receipt-status:hover {
+            transform: scale(1.15);
+        }
+
+    .clean-input {
+        background-color: #f5f2ed;
+        border: 1px solid #dcd3c9;
+        color: #432818;
+        padding: 8px 12px;
+        border-radius: 0;
+        width: 100%;
+        font-size: 0.9rem;
+    }
+
+    .text-price {
+        color: #386641;
+        font-weight: 700;
+    }
+</style>
+
+<div dir="rtl" class="page-container">
+    <div class="mb-5">
+        <h2 class="section-title">היסטוריית מכירות לקוחות</h2>
+    </div>
+
+    @* ====================== חלון סינונים חכם ====================== *@
+    <div class="elegant-window">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="stat-label">חיפוש לקוח / כללי</label>
+                <input type="search" class="clean-input" placeholder="הקלידי לחיפוש..." @bind="searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="col-md-3">
+                <label class="stat-label">סינון לפי ספר</label>
+                <input type="search" class="clean-input" placeholder="שם הספר..." @bind="filterBookName" @bind:event="oninput" />
+            </div>
+            <div class="col-md-3">
+                <label class="stat-label">סינון לפי תאריך</label>
+                <input type="date" class="clean-input" style="text-align: right; direction: ltr;" lang="en" @bind="filterDate" />
+            </div>
+            <div class="col-md-3">
+                <label class="stat-label">סינון לפי אמצעי תשלום</label>
+                <select class="clean-input" @bind="filterPaymentMethod">
+                    <option value="">הכל</option>
+                    @foreach (PayType pt in Enum.GetValues(typeof(PayType)))
+                    {
+                        <option value="@pt">@GetPaymentDisplayName(pt)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="text-end mt-2">
+            <button class="btn btn-sm btn-link text-muted p-0 text-decoration-none" style="font-size: 0.8rem;" @onclick="ClearFilters">נקה סינונים</button>
+        </div>
+    </div>
+
+    @* ====================== חלון טבלת נתונים ====================== *@
+    <div class="elegant-window">
+        @if (orders == null)
+        {
+            <p class="text-muted text-center py-4">טוען נתונים...</p>
+        }
+        else if (!FilteredOrders.Any())
+        {
+            <div class="py-5 text-center text-muted">לא נמצאו עסקאות תואמות לחיפוש.</div>
+        }
+        else
+        {
+            <table class="elegant-table">
+                <thead>
+                    <tr>
+                        @* שינוי רוחבי העמודות לפי הבקשה *@
+                        <th style="width: 12%;">תאריך ושעה</th>
+                        <th style="width: 12%;">לקוח</th>
+                        <th style="width: 28%;">פירוט ספרים</th>
+                        <th style="width: 17%;">תשלום</th>
+                        <th style="width: 7%;">סה"כ</th>
+                        <th class="text-center" style="width: 6%;">קבלה</th>
+                        <th class="text-center" style="width: 18%;">פעולות</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var order in FilteredOrders)
+                    {
+                        <tr class="clickable-row" @ondblclick="() => OpenEditModal(order)">
+                            <td class="small text-muted">@order.OrderDate.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td class="fw-bold">@(string.IsNullOrWhiteSpace(order.CustomerName) ? "לקוח מזדמן" : order.CustomerName)</td>
+                            <td class="small text-muted">
+                                @foreach (var item in order.OrderItems)
+                                {
+                                    <div>@item.Quantity x @(item.Book?.Name ?? "ספר שאינו בקטלוג")</div>
+                                }
+                            </td>
+                            <td class="small">@GetPaymentDisplayName(order.PaymentMethod)</td>
+                            <td class="text-price">@order.TotalAmount ₪</td>
+
+                            <td class="text-center">
+                                <button class="receipt-status"
+                                        title="@(order.HasReceipt ? "קבלה הופקה" : "חסרה קבלה - לחצי לסימון")"
+                                        @onclick="() => ToggleReceiptStatus(order)" @onclick:stopPropagation="true">
+                                    @if (order.HasReceipt)
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="#a98467" viewBox="0 0 16 16">
+                                            <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z" />
+                                            <path d="M10.854 7.854a.5.5 0 0 0-.708-.708L7.5 9.793 6.354 8.646a.5.5 0 1 0-.708.708l1.5 1.5a.5.5 0 0 0 .708 0l3-3z" />
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="#dcd3c9" viewBox="0 0 16 16">
+                                            <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z" />
+                                            <path d="M6.146 7.146a.5.5 0 0 1 .708 0L8 8.293l1.146-1.147a.5.5 0 1 1 .708.708L8.707 9l1.147 1.146a.5.5 0 0 1-.708.708L8 9.707l-1.146 1.147a.5.5 0 0 1-.708-.708L7.293 9 6.146 7.854a.5.5 0 0 1 0-.708z" />
+                                        </svg>
+                                    }
+                                </button>
+                            </td>
+
+                            <td class="text-center">
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button class="btn-action-edit" @onclick="() => OpenEditModal(order)" @onclick:stopPropagation="true">עריכה</button>
+                                    <button class="btn-action-delete" @onclick="() => DeleteOrder(order)" @onclick:stopPropagation="true">ביטול קנייה</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@* ---------- מודל עריכה (מעוצב) ---------- *@
+@if (editingOrder != null)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(43, 23, 12, 0.5);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content elegant-window border-0 p-4 shadow-lg">
+                <h5 class="fw-bold mb-4" style="color: #2b170c;">עריכת פרטי עסקה</h5>
+
+                <div class="mb-3">
+                    <label class="stat-label">שם הלקוח</label>
+                    <input type="text" class="clean-input" @bind="editingOrder.CustomerName" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="stat-label">אמצעי תשלום</label>
+                    <select class="clean-input" @bind="editingOrder.PaymentMethod">
+                        @foreach (var payType in Enum.GetValues(typeof(PayType)))
+                        {
+                            <option value="@payType">@GetPaymentDisplayName((PayType)payType)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm text-muted px-3" @onclick="CloseEditModal">ביטול</button>
+                    <button class="btn-action-edit px-4 py-2" @onclick="SaveChanges">שמור שינויים</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Order> orders;
+    private Order editingOrder = null;
+    private string searchTerm = "";
+    private string filterBookName = "";
+    private DateTime? filterDate = null;
+    private PayType? filterPaymentMethod = null;
+
+    private IEnumerable<Order> FilteredOrders => orders?
+        .Where(o =>
+            (string.IsNullOrWhiteSpace(searchTerm) || o.CustomerName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true) &&
+            (string.IsNullOrWhiteSpace(filterBookName) || o.OrderItems.Any(i => i.Book != null && i.Book.Name.Contains(filterBookName, StringComparison.OrdinalIgnoreCase))) &&
+            (!filterDate.HasValue || o.OrderDate.Date == filterDate.Value.Date) &&
+            (!filterPaymentMethod.HasValue || o.PaymentMethod == filterPaymentMethod.Value)
+        ) ?? Enumerable.Empty<Order>();
+
+    protected override async Task OnInitializedAsync() { await LoadOrders(); }
+
+    private async Task LoadOrders()
+    {
+        orders = await DbContext.Orders
+            .Include(o => o.OrderItems).ThenInclude(i => i.Book)
+            .OrderByDescending(o => o.OrderDate).ToListAsync();
+    }
+
+    private void ClearFilters() { searchTerm = ""; filterBookName = ""; filterDate = null; filterPaymentMethod = null; }
+
+    private async Task ToggleReceiptStatus(Order order)
+    {
+        order.HasReceipt = !order.HasReceipt;
+        DbContext.Orders.Update(order);
+        await DbContext.SaveChangesAsync();
+    }
+
+    private void OpenEditModal(Order order)
+    {
+        editingOrder = new Order { Id = order.Id, CustomerName = order.CustomerName, PaymentMethod = order.PaymentMethod };
+    }
+
+    private void CloseEditModal() { editingOrder = null; }
+
+    private async Task SaveChanges()
+    {
+        if (editingOrder != null)
+        {
+            var dbOrder = await DbContext.Orders.FindAsync(editingOrder.Id);
+            if (dbOrder != null)
+            {
+                dbOrder.CustomerName = editingOrder.CustomerName;
+                dbOrder.PaymentMethod = editingOrder.PaymentMethod;
+                await DbContext.SaveChangesAsync();
+                await LoadOrders();
+                editingOrder = null;
+            }
+        }
+    }
+
+    private async Task DeleteOrder(Order order)
+    {
+        bool confirm = await JS.InvokeAsync<bool>("confirm", "האם לבטל את העסקה? הספרים יוחזרו למלאי.");
+        if (confirm)
+        {
+            foreach (var item in order.OrderItems)
+            {
+                var book = await DbContext.Books.FindAsync(item.BookId);
+                if (book != null) book.StockQuantity += item.Quantity;
+            }
+            DbContext.Orders.Remove(order);
+            await DbContext.SaveChangesAsync();
+            await LoadOrders();
+        }
+    }
+
+    private string GetPaymentDisplayName(PayType payType)
+    {
+        return payType switch
+        {
+            PayType.BITAyelet => "העברה בBIT לאילת",
+            PayType.BITShilo => "העברה בBIT לשילה",
+            PayType.PAYBOXAyelet => "העברה בPAYBOX לאילת",
+            PayType.PAYBOXShilo => "העברה בPAYBOX לשילה",
+            PayType.Cash => "תשלום מזומן",
+            PayType.Bank => "העברה בנקאית",
+            _ => payType.ToString()
+        };
+    }
+}

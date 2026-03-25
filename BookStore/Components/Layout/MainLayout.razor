@@ -1,0 +1,40 @@
+﻿@inherits LayoutComponentBase
+
+<div class="page" dir="rtl">
+    <div class="sidebar pastel-sidebar">
+        <NavMenu />
+    </div>
+
+    <main class="main-content">
+        <article class="content px-4 py-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui">
+    תקלה התרחשה.
+    <a href="" class="reload">רענן עמוד</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+<style>
+    body {
+        background-color: #faf9f6; /* צבע "נייר" נקי */
+        color: #432818;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    .pastel-sidebar {
+        width: 280px;
+        background-color: #f5f2ed !important;
+        border-left: 1px solid #e3d5ca;
+        flex-shrink: 0;
+    }
+
+    /* ביטול הצבעים הכחולים של לינקים ברירת מחדל */
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+</style>
